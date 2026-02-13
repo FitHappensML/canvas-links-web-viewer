@@ -1,0 +1,1553 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Obsidian Canvas Viewer v3.6</title>
+  <style>
+    :root {
+      /* Palette inspired by Obsidian Default Dark */
+      --bg: #1e1e1e;
+      --panel: #252526;
+      --card: #2b2b2b;
+      --stroke: #3f3f3f;
+      --text: #d4d4d4;
+      --text-muted: #999999;
+      --primary: #cfc3ff;
+      /* Slight purple tint for interactive elements */
+      --accent: #7b68ee;
+      --link: #9cdcfe;
+      --edge: #6e7681;
+      --group: #292a2d;
+      --selection: rgba(123, 104, 238, 0.2);
+      --success: #33b864;
+      --warning: #ffbe3d;
+      --card-bg: #323232;
+    }
+
+    /* Reset & Base */
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Toolbar */
+    #toolbar {
+      flex: 0 0 50px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--stroke);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      z-index: 10;
+    }
+
+    .btn {
+      background: #333;
+      border: 1px solid #444;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: #444;
+      border-color: #555;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn.primary:hover {
+      background: #6a5acd;
+    }
+
+    .btn.connected {
+      border-color: var(--success);
+      color: var(--success);
+      background: rgba(51, 184, 100, 0.1);
+    }
+
+    .btn.disconnected {
+      border-color: var(--warning);
+      color: var(--warning);
+      background: rgba(255, 190, 61, 0.1);
+    }
+
+    .separator {
+      width: 1px;
+      height: 24px;
+      background: var(--stroke);
+      margin: 0 4px;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+
+    /* Search Bar */
+    #search-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    #search-input {
+      background: #111;
+      border: 1px solid #444;
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      width: 200px;
+      font-size: 13px;
+    }
+
+    #search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    #search-count {
+      position: absolute;
+      right: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Canvas Stage */
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      /* We handle scrolling via transform */
+      background: radial-gradient(circle, #252526 1px, transparent 1px);
+      background-size: 24px 24px;
+      cursor: grab;
+    }
+
+    #viewport:active {
+      cursor: grabbing;
+    }
+
+    #stage {
+      position: absolute;
+      transform-origin: 0 0;
+      /* Will be set by JS */
+    }
+
+    /* SVG Layer */
+    #svg-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .edge {
+      stroke: var(--edge);
+      stroke-width: 2px;
+      fill: none;
+      transition: stroke 0.2s;
+    }
+
+    .edge.highlighted {
+      stroke: var(--accent);
+      stroke-width: 3px;
+    }
+
+    .edge-label {
+      fill: var(--text-muted);
+      font-size: 11px;
+      background: var(--bg);
+    }
+
+    /* Nodes */
+    .node {
+      position: absolute;
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transition: box-shadow 0.2s, border-color 0.2s;
+      z-index: 2;
+      overflow: hidden;
+    }
+
+    .node:hover {
+      border-color: var(--text-muted);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .node.highlighted {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--selection);
+      z-index: 3;
+    }
+
+    .node-header {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--primary);
+      margin-bottom: 8px;
+      flex: 0 0 auto;
+    }
+
+    .node-body {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      overflow-y: auto;
+      flex: 1 1 auto;
+      white-space: pre-wrap;
+      /* For fallback, but we use innerHTML mostly now */
+      word-break: break-word;
+    }
+
+    /* Groups */
+    .group {
+      position: absolute;
+      background: rgba(40, 40, 45, 0.5);
+      border: 1px dashed var(--stroke);
+      border-radius: 12px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .group-label {
+      position: absolute;
+      top: -24px;
+      left: 0;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      background: var(--bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Metadata pills */
+    .meta-row {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .action-link {
+      font-size: 11px;
+      color: var(--link);
+      text-decoration: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .action-link:hover {
+      text-decoration: underline;
+      color: #fff;
+    }
+
+    /* Scrollbars inside nodes */
+    .node-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .node-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .node-body::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .node-body::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 100;
+      font-size: 13px;
+    }
+
+    #toast.show {
+      opacity: 1;
+    }
+
+    /* Recent Files Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      width: 400px;
+      max-width: 90%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--stroke);
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .close-modal {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 20px;
+    }
+
+    .close-modal:hover {
+      color: var(--text);
+    }
+
+    .recent-list {
+      padding: 8px 0;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .recent-item {
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+    }
+
+    .recent-item:hover {
+      background: #333;
+    }
+
+    .recent-item .name {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .recent-item .path {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .recent-item .type {
+      font-size: 10px;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+      font-weight: bold;
+    }
+
+    .empty-msg {
+      padding: 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* --- New Rich Link Styling --- */
+
+    a {
+      color: var(--link);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .link-card {
+      display: block;
+      margin: 8px 0;
+      padding: 8px 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      text-decoration: none !important;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .link-card:hover {
+      background: #3a3a3a;
+      border-color: var(--text-muted);
+    }
+
+    .link-card-url {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .link-card-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--primary);
+      display: block;
+      line-height: 1.4;
+    }
+
+    .link-card-desc {
+      font-size: 11px;
+      color: var(--text);
+      margin-top: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      opacity: 0.8;
+    }
+
+    /* Loading state for card */
+    .link-card.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .link-card.loading .link-card-title {
+      color: var(--text-muted);
+    }
+
+    .embedded-img {
+      max-width: 100%;
+      border-radius: 4px;
+      margin: 4px 0;
+      border: 1px solid var(--stroke);
+    }
+
+    .embedded-iframe {
+      width: 100%;
+      height: 200px;
+      border: none;
+      border-radius: 4px;
+      background: #000;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="toolbar">
+    <button id="btn-open" class="btn primary">Open File</button>
+    <button id="btn-history" class="btn">Recent ▾</button>
+    <div class="separator"></div>
+    <button id="btn-refresh" class="btn" title="Reload current file (Ctrl+R)">Refresh</button>
+    <button id="btn-vault" class="btn">Select Vault Folder</button>
+    <div class="separator"></div>
+    <button id="btn-zoom-out" class="btn">-</button>
+    <button id="btn-zoom-reset" class="btn">100%</button>
+    <button id="btn-zoom-in" class="btn">+</button>
+    <button id="btn-fit" class="btn">Fit View</button>
+    <div class="separator"></div>
+    <div id="search-container">
+      <input id="search-input" type="text" placeholder="Search nodes..." />
+      <span id="search-count"></span>
+    </div>
+    <span id="status-text" class="status">Click "Open File" to start</span>
+
+    <!-- Hidden inputs for fallback -->
+    <input type="file" id="file-input" accept=".canvas,.json" style="display:none" />
+    <input type="file" id="folder-input" webkitdirectory style="display:none" />
+  </div>
+
+  <div id="viewport">
+    <div id="stage">
+      <svg id="svg-layer" viewBox="0 0 100 100">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+            <path d="M0,0 L10,5 L0,10" fill="#6e7681" />
+          </marker>
+        </defs>
+      </svg>
+      <div id="nodes-layer"></div>
+    </div>
+  </div>
+
+  <div id="toast">Message</div>
+
+  <!-- Recent Files Modal -->
+  <div id="history-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Recent Files & Vaults</span>
+        <span class="close-modal">&times;</span>
+      </div>
+      <div id="recent-list" class="recent-list"></div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Configuration & Utils
+     */
+    const CONFIG = {
+      minZoom: 0.1, maxZoom: 5.0, zoomStep: 0.1, margin: 200,
+      maxRecentFiles: 5,
+      maxRecentVaults: 3
+    };
+
+    const Utils = {
+      debounce(func, wait) {
+        let timeout;
+        return function (...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); };
+      },
+      clamp(val, min, max) { return Math.min(Math.max(val, min), max); },
+      sanitizeId(id) { return 'node-' + String(id).replace(/[^a-zA-Z0-9-_]/g, '_'); },
+      normPath(p) { return String(p || '').replace(/\\/g, '/').replace(/^\/+/, '').trim(); },
+      triggerExternalProtocol(url) {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        setTimeout(() => iframe.remove(), 1200);
+      },
+      truncate(str, len = 20) {
+        if (!str) return '';
+        if (str.length <= len) return str;
+        return str.substring(0, len) + '...';
+      },
+      escapeHtml(unsafe) {
+        return unsafe
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+    };
+
+    /**
+     * Text Processor (Markdown Links & Embeds)
+     */
+    class TextProcessor {
+      static process(text) {
+        if (!text) return '';
+        // 1. Sanitize HTML first to prevent injection from file content, 
+        //    but allow our own markup generation later.
+        let safe = Utils.escapeHtml(text);
+
+        // 2. Process Markdown Links: [text](url)
+        // Regex needs to be improved to handle various cases, but basic one:
+        // \[([^\]]+)\]\(([^)]+)\)
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (match, label, url) => {
+          return this.createLinkHtml(url, label);
+        });
+
+        // 3. Process Bare URLs (that weren't captured by MD link)
+        // We use a negative lookbehind (if supported) or just match carefully.
+        // Simplified: Match http/https that is NOT preceded by ]( or ="
+        // A simple way is to split by our previously generated specific tokens or just run it.
+        // Actually, let's just do a simple pass for raw URLs showing up.
+        // Note: This regex is simple and might catch inside attributes if not careful.
+        // But since we sanitized first, attributes are &quot;...
+        safe = safe.replace(/(?<!href=&quot;)(https?:\/\/[^\s<]+)/g, (match) => {
+          // Avoid double linking if it was already part of the MD replacement
+          // The negative lookbehind checks for valid HTML attr start
+          // But we just replaced with <a ...> which has href="...
+          // So we should be careful.
+          // Easier hack: Don't linkify if inside tag.
+          // For this MVP, let's rely on the fact that we process MD links first which produces HTML <a ...>
+          // The raw link regex will see `href="https://..."`
+          // So we must skip matches starting with `href="` or `src="`
+          if (match.startsWith('http') && !text.includes('](' + match)) {
+            // Simple heuristic hack for this environment
+            // Check if this specific match index is inside an existing tag? Hard with regex.
+            // Let's assume user mostly uses MD links or raw links. Use a smarter regex?
+            // Or just use a library like 'marked' if we had it.
+            // WE DON'T.
+
+            // Let's preserve the already generated tags by tokenizing?
+            // Too complex.
+            // Let's just do bare URL detection ONLY if not preceded by `"` or `>`.
+            // Example: `>https://` (content) is ok. `"https://` (attribute) is bad.
+          }
+          return match; // Placeholder. Real implementation below.
+        });
+
+        // Revised Strategy:
+        // 1. Split text by MD links pattern.
+        // 2. Process raw text parts for bare URLs.
+        // 3. Reassemble.
+
+        // Reset.
+        safe = Utils.escapeHtml(text);
+        const parts = [];
+        let lastIndex = 0;
+
+        // Match Markdown Links [label](url)
+        const mdRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+        let match;
+
+        while ((match = mdRegex.exec(safe)) !== null) {
+          // Push preceding text (processed for bare URLs)
+          const pre = safe.slice(lastIndex, match.index);
+          parts.push(this.linkifyBare(pre));
+
+          // Push transformed MD link
+          parts.push(this.createLinkHtml(match[2], match[1]));
+
+          lastIndex = mdRegex.lastIndex;
+        }
+        // Push remaining text
+        parts.push(this.linkifyBare(safe.slice(lastIndex)));
+
+        return parts.join('');
+      }
+
+      static linkifyBare(text) {
+        // Find URLs: https://example.com
+        return text.replace(/(https?:\/\/[^\s]+)/g, (url) => {
+          // Remove trailing punctuation often captured
+          const cleanUrl = url.replace(/[.,;!?)]+$/, '');
+          const suffix = url.slice(cleanUrl.length);
+          return this.createLinkHtml(cleanUrl, cleanUrl) + suffix;
+        });
+      }
+
+      static createLinkHtml(url, label) {
+        // Check for specific enhancements
+        if (this.isArxiv(url)) {
+          return `<a href="${url}" target="_blank" class="link-card loading" data-arxiv-id="${this.getArxivId(url)}">
+                <span class="link-card-url">ARXIV.ORG</span>
+                <span class="link-card-title">${label}</span>
+                <span class="link-card-desc">Loading abstract...</span>
+            </a>`;
+        }
+
+        if (this.isImage(url)) {
+          return `<a href="${url}" target="_blank"><img src="${url}" class="embedded-img" alt="${label}" /></a>`;
+        }
+
+        if (this.isYoutube(url)) {
+          const vid = this.getYoutubeId(url);
+          if (vid) {
+            return `<iframe class="embedded-iframe" src="https://www.youtube.com/embed/${vid}" allowfullscreen></iframe>
+                        <a href="${url}" target="_blank" class="action-link">${label || 'Watch on YouTube'} ↗</a>`;
+          }
+        }
+
+        // Default Link Card
+        return `<a href="${url}" target="_blank" class="link-card">
+            <span class="link-card-url">${new URL(url).hostname}</span>
+            <span class="link-card-title">${label}</span>
+        </a>`;
+      }
+
+      // --- Helpers ---
+
+      static isImage(url) { return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url); }
+
+      static isYoutube(url) { return url.includes('youtube.com') || url.includes('youtu.be'); }
+      static getYoutubeId(url) {
+        const m = url.match(/(?:youtu\.be\/|youtube\.com\/.*v=)([^&]+)/);
+        return m ? m[1] : null;
+      }
+
+      static isArxiv(url) { return url.includes('arxiv.org/abs/'); }
+      static getArxivId(url) {
+        const m = url.match(/arxiv\.org\/abs\/([^/?#&]+)/);
+        return m ? m[1] : null;
+      }
+    }
+
+    /**
+     * Recent Manager (IndexedDB)
+     */
+    class RecentManager {
+      constructor() {
+        this.dbName = 'ObsidianCanvasViewerDB';
+        this.storeName = 'handles';
+        this.db = null;
+        this.initDB();
+      }
+
+      async initDB() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, 1);
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(this.storeName)) {
+              db.createObjectStore(this.storeName, { keyPath: 'id' });
+            }
+          };
+          request.onsuccess = (event) => {
+            this.db = event.target.result;
+            resolve(this.db);
+          };
+          request.onerror = (event) => {
+            console.error("IndexedDB error", event);
+            resolve(null);
+          };
+        });
+      }
+
+      async saveHandle(handle, type) {
+        if (!this.db) await this.initDB();
+        if (!this.db) return;
+
+        const tx = this.db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+
+        const id = type + ':' + handle.name;
+        const item = {
+          id: id,
+          name: handle.name,
+          type: type,
+          handle: handle,
+          lastOpened: Date.now()
+        };
+
+        store.put(item);
+      }
+
+      async getRecents() {
+        if (!this.db) await this.initDB();
+        if (!this.db) return [];
+
+        return new Promise((resolve) => {
+          const tx = this.db.transaction([this.storeName], 'readonly');
+          const store = tx.objectStore(this.storeName);
+          const request = store.getAll();
+          request.onsuccess = () => {
+            const items = request.result || [];
+            items.sort((a, b) => b.lastOpened - a.lastOpened);
+            resolve(items);
+          };
+          request.onerror = () => resolve([]);
+        });
+      }
+
+      async getLastVault() {
+        const all = await this.getRecents();
+        return all.find(i => i.type === 'folder');
+      }
+
+      async getLastFile() {
+        const all = await this.getRecents();
+        return all.find(i => i.type === 'file');
+      }
+    }
+
+    /**
+     * Vault Manager
+     */
+    class VaultManager {
+      constructor(app) {
+        this.app = app;
+        this.files = new Map();
+        this.sourceType = 'input';
+      }
+
+      setFiles(fileList) {
+        this.sourceType = 'input';
+        this.files.clear();
+        for (const f of fileList) {
+          const rel = f.webkitRelativePath || f.name;
+          const parts = rel.split('/');
+          const relNoRoot = (parts.length > 1) ? parts.slice(1).join('/') : rel;
+          this.files.set(Utils.normPath(relNoRoot), f);
+        }
+        return this.files.size;
+      }
+
+      async mountHandle(dirHandle) {
+        this.sourceType = 'handle';
+        this.files.clear();
+        let count = 0;
+        const processEntry = async (handle, path) => {
+          const relPath = path ? path + '/' + handle.name : handle.name;
+          if (handle.kind === 'file') {
+            if (handle.name.endsWith('.md')) {
+              this.files.set(Utils.normPath(relPath), handle);
+              count++;
+            }
+          } else if (handle.kind === 'directory') {
+            for await (const entry of handle.values()) {
+              await processEntry(entry, relPath);
+            }
+          }
+        };
+        for await (const entry of dirHandle.values()) {
+          await processEntry(entry, "");
+        }
+        return count;
+      }
+
+      async getFileText(path) {
+        const key = Utils.normPath(path);
+        const item = this.files.get(key);
+
+        if (!item) return null;
+
+        try {
+          let text = "";
+          if (item instanceof File) {
+            text = await item.text();
+          } else {
+            const file = await item.getFile();
+            text = await file.text();
+          }
+          return this.stripFrontmatter(text);
+        } catch (e) {
+          return "(Error reading file)";
+        }
+      }
+
+      stripFrontmatter(md) {
+        const s = String(md || '');
+        if (!s.startsWith('---')) return s;
+        const end = s.indexOf('\n---', 3);
+        if (end === -1) return s;
+        return s.slice(end + 4).replace(/^\s+/, '');
+      }
+    }
+
+    /**
+     * Parsing Logic
+     */
+    class CanvasParser {
+      constructor() {
+        this.data = null;
+        this.bounds = { x: 0, y: 0, w: 0, h: 0 };
+      }
+
+      parse(jsonString) {
+        try {
+          this.data = JSON.parse(jsonString);
+          if (!this.data.nodes) throw new Error("No nodes found");
+          this.calculateBounds();
+          return this.data;
+        } catch (e) {
+          console.error("Parse error", e);
+          throw e;
+        }
+      }
+
+      calculateBounds() {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        (this.data.nodes || []).forEach(node => {
+          minX = Math.min(minX, node.x);
+          minY = Math.min(minY, node.y);
+          maxX = Math.max(maxX, node.x + node.width);
+          maxY = Math.max(maxY, node.y + node.height);
+        });
+        if (minX === Infinity) { minX = 0; minY = 0; maxX = 1000; maxY = 800; }
+        this.bounds = {
+          x: minX,
+          y: minY,
+          w: maxX - minX,
+          h: maxY - minY,
+          minX, minY, maxX, maxY
+        };
+      }
+    }
+
+    /**
+     * Rendering Logic
+     */
+    class CanvasRenderer {
+      constructor(containerId, vaultManager) {
+        this.container = document.getElementById(containerId);
+        this.nodesLayer = document.getElementById('nodes-layer');
+        this.svgLayer = document.getElementById('svg-layer');
+        this.vaultManager = vaultManager;
+      }
+
+      clear() {
+        this.nodesLayer.innerHTML = '';
+        const defs = this.svgLayer.querySelector('defs');
+        this.svgLayer.innerHTML = '';
+        if (defs) this.svgLayer.appendChild(defs);
+      }
+
+      resizeStage(width, height) {
+        this.container.style.width = width + 'px';
+        this.container.style.height = height + 'px';
+        this.svgLayer.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      }
+
+      renderNodes(nodes, shiftX, shiftY) {
+        nodes.forEach(node => {
+          const x = node.x + shiftX;
+          const y = node.y + shiftY;
+          const el = document.createElement('div');
+
+          if (node.type === 'group') {
+            el.className = 'group';
+            const label = document.createElement('div');
+            label.className = 'group-label';
+            label.textContent = node.label || 'Group';
+            el.appendChild(label);
+          } else {
+            el.className = 'node';
+            el.id = Utils.sanitizeId(node.id);
+            el.dataset.id = node.id;
+
+            const title = this.getNodeTitle(node);
+            if (title) {
+              const header = document.createElement('div');
+              header.className = 'node-header';
+              header.textContent = title;
+              el.appendChild(header);
+            }
+
+            const body = document.createElement('div');
+            body.className = 'node-body';
+
+            if (node.type === 'file' && node.file) {
+              body.textContent = 'Loading preview...';
+              this.vaultManager.getFileText(node.file).then(text => {
+                const content = text || (node.file + '\n(Preview not loaded)');
+                body.innerHTML = TextProcessor.process(content);
+                this.hydrateCards(body); // Trigger API fetches
+              });
+            } else {
+              body.innerHTML = TextProcessor.process(this.getNodeText(node));
+              this.hydrateCards(body);
+            }
+            el.appendChild(body);
+
+            const metaRow = document.createElement('div');
+            metaRow.className = 'meta-row';
+
+            if (node.file) {
+              const actionLink = document.createElement('a');
+              actionLink.className = 'action-link';
+              actionLink.textContent = 'Open in Obsidian ↗';
+              const encFile = encodeURIComponent(node.file);
+              actionLink.href = `obsidian://open?file=${encFile}`;
+              actionLink.target = '_blank';
+              actionLink.rel = "noopener noreferrer";
+              metaRow.appendChild(actionLink);
+            }
+
+            el.appendChild(metaRow);
+          }
+
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
+          el.style.width = node.width + 'px';
+          el.style.height = node.height + 'px';
+
+          if (node.color && node.color.startsWith('#')) el.style.borderColor = node.color;
+
+          this.nodesLayer.appendChild(el);
+        });
+      }
+
+      // Async Metadata Fetcher for Link Cards
+      hydrateCards(container) {
+        container.querySelectorAll('.link-card.loading[data-arxiv-id]').forEach(async (card) => {
+          const id = card.dataset.arxivId;
+          try {
+            // Fetch from Arxiv API
+            // Since we are file:// or local, this might likely fail due to CORS unless passing an extension or proxy.
+            // However, Arxiv Export API is generally open. Let's try.
+            // Retrieve metadata using a CORS proxy (allorigins) to bypass restrictions
+            // The original: https://export.arxiv.org/api/query?id_list=${id}
+            const targetUrl = `https://export.arxiv.org/api/query?id_list=${id}`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+            const resp = await fetch(proxyUrl);
+            if (!resp.ok) throw new Error("Fetch failed");
+
+            const str = await resp.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(str, "text/xml");
+            const entry = doc.querySelector("entry");
+
+            if (entry) {
+              const title = entry.querySelector("title").textContent.trim();
+              const summary = entry.querySelector("summary").textContent.trim().replace(/\n/g, ' ');
+
+              card.querySelector('.link-card-title').textContent = title;
+              card.querySelector('.link-card-desc').textContent = summary;
+              card.classList.remove('loading');
+            } else {
+              throw new Error("No entry found");
+            }
+          } catch (e) {
+            console.warn("Arxiv fetch failed", e);
+            // Update UI with clearer error
+            card.querySelector('.link-card-desc').textContent = "Preview unavailable (CORS Proxy blocked)";
+            card.classList.remove('loading');
+          }
+        });
+      }
+
+      renderEdges(edges, nodesMap, shiftX, shiftY) {
+        edges.forEach(edge => {
+          const fromNode = nodesMap.get(edge.fromNode);
+          const toNode = nodesMap.get(edge.toNode);
+          if (!fromNode || !toNode) return;
+
+          const p1 = this.getAnchorPoint(fromNode, edge.fromSide, shiftX, shiftY);
+          const p2 = this.getAnchorPoint(toNode, edge.toSide, shiftX, shiftY);
+          const c1 = this.getControlPoint(p1, edge.fromSide);
+          const c2 = this.getControlPoint(p2, edge.toSide);
+
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`);
+          path.setAttribute("class", "edge");
+          path.setAttribute("marker-end", "url(#arrow)");
+
+          this.svgLayer.appendChild(path);
+
+          if (edge.label) {
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("x", (p1.x + p2.x) / 2);
+            text.setAttribute("y", (p1.y + p2.y) / 2);
+            text.setAttribute("class", "edge-label");
+            text.textContent = edge.label;
+            this.svgLayer.appendChild(text);
+          }
+        });
+      }
+
+      getNodeTitle(node) {
+        if (node.label) return node.label;
+        if (node.file) return node.file.split('/').pop();
+        if (node.url) return node.url;
+        return null;
+      }
+
+      getNodeText(node) {
+        if (node.text) return node.text;
+        if (node.file) return "";
+        if (node.url) return node.url;
+        return "";
+      }
+
+      getAnchorPoint(node, side, shiftX, shiftY) {
+        const x = node.x + shiftX;
+        const y = node.y + shiftY;
+        const w = node.width;
+        const h = node.height;
+        switch (side) {
+          case 'top': return { x: x + w / 2, y: y };
+          case 'bottom': return { x: x + w / 2, y: y + h };
+          case 'left': return { x: x, y: y + h / 2 };
+          case 'right': return { x: x + w, y: y + h / 2 };
+          default: return { x: x + w / 2, y: y + h / 2 };
+        }
+      }
+
+      getControlPoint(p, side) {
+        const dist = 100;
+        switch (side) {
+          case 'top': return { x: p.x, y: p.y - dist };
+          case 'bottom': return { x: p.x, y: p.y + dist };
+          case 'left': return { x: p.x - dist, y: p.y };
+          case 'right': return { x: p.x + dist, y: p.y };
+          default: return p;
+        }
+      }
+    }
+
+    /**
+     * Application State & Control
+     */
+    class App {
+      constructor() {
+        this.vaultManager = new VaultManager(this);
+        this.recentManager = new RecentManager();
+        this.parser = new CanvasParser();
+        this.renderer = new CanvasRenderer('stage', this.vaultManager);
+        this.viewport = document.getElementById('viewport');
+        this.stage = document.getElementById('stage');
+
+        // State
+        this.fileHandle = null;
+        this.vaultHandle = null;
+        this.zoom = 1; this.viewX = 0; this.viewY = 0;
+        this.isDragging = false; this.lastMouseX = 0; this.lastMouseY = 0;
+        this.shiftX = 0; this.shiftY = 0;
+        this.searchResults = []; this.searchIndex = -1;
+
+        this.bindEvents();
+        this.setupFallbackInputs();
+
+        // Startup Logic
+        setTimeout(async () => {
+          await this.tryAutoConnectCanvas();
+          await this.tryAutoConnectVault();
+        }, 500);
+      }
+
+      bindEvents() {
+        document.getElementById('btn-open').onclick = () => this.handleOpen();
+        document.getElementById('btn-refresh').onclick = () => this.handleRefresh();
+        document.getElementById('btn-vault').onclick = () => this.handleOpenVault();
+
+        document.getElementById('btn-history').onclick = () => this.showHistory();
+        document.querySelector('.close-modal').onclick = () => document.getElementById('history-modal').classList.remove('open');
+        document.getElementById('history-modal').addEventListener('click', (e) => {
+          if (e.target.id === 'history-modal') e.target.classList.remove('open');
+        });
+
+        document.getElementById('btn-fit').onclick = () => this.fitView();
+        document.getElementById('btn-zoom-in').onclick = () => this.setZoom(this.zoom + CONFIG.zoomStep);
+        document.getElementById('btn-zoom-out').onclick = () => this.setZoom(this.zoom - CONFIG.zoomStep);
+        document.getElementById('btn-zoom-reset').onclick = () => this.setZoom(1);
+
+        this.viewport.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.node')) return;
+          this.isDragging = true;
+          this.lastMouseX = e.clientX;
+          this.lastMouseY = e.clientY;
+          this.viewport.style.cursor = 'grabbing';
+          e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!this.isDragging) return;
+          const dx = e.clientX - this.lastMouseX;
+          const dy = e.clientY - this.lastMouseY;
+          this.viewX += dx;
+          this.viewY += dy;
+          this.lastMouseX = e.clientX;
+          this.lastMouseY = e.clientY;
+          this.updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+          this.isDragging = false;
+          this.viewport.style.cursor = 'default';
+        });
+
+        this.viewport.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
+
+        document.getElementById('search-input').addEventListener('input', Utils.debounce((e) => {
+          this.performSearch(e.target.value);
+        }, 300));
+
+        document.getElementById('search-input').addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            if (e.shiftKey) this.nextSearchResult(-1);
+            else this.nextSearchResult(1);
+          }
+        });
+
+        window.addEventListener('keydown', (e) => {
+          if (e.ctrlKey && e.key === 'r') { e.preventDefault(); this.handleRefresh(); }
+          if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('search-input').focus(); }
+        });
+      }
+
+      setupFallbackInputs() {
+        document.getElementById('file-input').addEventListener('change', (e) => {
+          if (e.target.files.length > 0) this.loadFileObject(e.target.files[0]);
+        });
+        document.getElementById('folder-input').addEventListener('change', (e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) {
+            const count = this.vaultManager.setFiles(files);
+            this.showToast(`Vault loaded: ${count} files (No Persistence)`);
+            if (this.parser.data) this.renderCanvas(this.parser.data);
+            this.updateVaultButton("Vault: Loaded", true);
+          }
+        });
+      }
+
+      // --- Auto Connect Logic ---
+
+      async tryAutoConnectCanvas() {
+        const lastCanvas = await this.recentManager.getLastFile();
+        if (lastCanvas) {
+          this.fileHandle = lastCanvas.handle;
+          try {
+            // If permission is already granted, load it!
+            const state = await this.fileHandle.queryPermission({ mode: 'read' });
+            if (state === 'granted') {
+              await this.loadFromFileHandle(true);
+            } else {
+              // Need prompt, update button
+              this.updateFileButton(`Reconnect: ${this.fileHandle.name}`, false);
+              this.showToast(`Found recent canvas: ${this.fileHandle.name}`);
+            }
+          } catch (e) { console.warn(e); }
+        }
+      }
+
+      async tryAutoConnectVault() {
+        const lastVault = await this.recentManager.getLastVault();
+        if (lastVault) {
+          this.vaultHandle = lastVault.handle;
+          try {
+            const state = await this.vaultHandle.queryPermission({ mode: 'read' });
+            if (state === 'granted') {
+              await this.loadFromVaultHandle(true);
+            } else {
+              this.updateVaultButton(`Reconnect: ${this.vaultHandle.name}`, false);
+              this.showToast(`Found recent vault: ${this.vaultHandle.name}`);
+            }
+          } catch (e) { console.warn(e); }
+        }
+      }
+
+      // --- File Handling ---
+
+      async handleOpen() {
+        // If reconnecting
+        if (this.fileHandle && !this.fileVerified) {
+          await this.loadFromFileHandle();
+          return;
+        }
+
+        if (window.showOpenFilePicker) {
+          try {
+            const [handle] = await window.showOpenFilePicker({
+              types: [{ description: 'Canvas', accept: { 'application/json': ['.canvas', '.json'] } }],
+              multiple: false
+            });
+            this.fileHandle = handle;
+            await this.recentManager.saveHandle(handle, 'file');
+            await this.loadFromFileHandle();
+          } catch (err) {
+            if (err.name !== 'AbortError') this.showToast("Error: " + err.message);
+          }
+        } else {
+          document.getElementById('file-input').click();
+        }
+      }
+
+      // Unified Vault Opener
+      async handleOpenVault() {
+        if (this.vaultHandle && !this.vaultVerified) {
+          await this.loadFromVaultHandle();
+          return;
+        }
+
+        if (window.showDirectoryPicker) {
+          try {
+            const handle = await window.showDirectoryPicker();
+            this.vaultHandle = handle;
+            await this.recentManager.saveHandle(handle, 'folder');
+            await this.loadFromVaultHandle();
+          } catch (err) {
+            if (err.name !== 'AbortError') this.showToast("Vault Error: " + err.message);
+          }
+        } else {
+          document.getElementById('folder-input').click();
+        }
+      }
+
+      async loadFromVaultHandle(silent = false) {
+        if (!this.vaultHandle) return;
+        if (!silent) this.showToast("Scanning vault...");
+        try {
+          if ((await this.vaultHandle.queryPermission({ mode: 'read' })) !== 'granted') {
+            if ((await this.vaultHandle.requestPermission({ mode: 'read' })) !== 'granted') {
+              throw new Error("Permission denied");
+            }
+          }
+          const count = await this.vaultManager.mountHandle(this.vaultHandle);
+          if (!silent) this.showToast(`Vault mounted: ${count} files`);
+          if (this.parser.data) this.renderCanvas(this.parser.data);
+
+          this.vaultVerified = true;
+          this.updateVaultButton(`Vault: ${this.vaultHandle.name}`, true);
+          document.getElementById('history-modal').classList.remove('open');
+        } catch (e) {
+          this.showToast("Vault Load Error: " + e.message);
+          this.updateVaultButton(`Error: ${this.vaultHandle.name}`, false);
+        }
+      }
+
+      updateVaultButton(text, connected) {
+        const btn = document.getElementById('btn-vault');
+        // Truncate
+        const prefix = text.includes(':') ? text.split(':')[0] + ': ' : '';
+        const name = text.includes(':') ? text.split(':')[1].trim() : text;
+        const final = prefix + Utils.truncate(name, 15);
+
+        btn.textContent = final;
+        btn.className = 'btn ' + (connected ? 'connected' : 'disconnected');
+      }
+
+      updateFileButton(text, connected) {
+        const btn = document.getElementById('btn-open');
+        // Truncate logic
+        // text might be "Reconnect: MyFile.canvas" or just "Open File"
+        let final = text;
+        if (text.includes('Reconnect:') || connected) {
+          const prefix = text.includes(':') ? text.split(':')[0] + ': ' : (connected ? 'Canvas: ' : '');
+          const name = text.includes(':') ? text.split(':')[1].trim() : (connected ? this.fileHandle.name : text);
+          final = prefix + Utils.truncate(name, 15);
+        }
+
+        btn.textContent = final;
+        if (!connected && text !== "Open File") {
+          btn.className = 'btn disconnected';
+        } else if (connected) {
+          btn.className = 'btn connected';
+        } else {
+          btn.className = 'btn primary';
+        }
+      }
+
+      async handleRefresh() {
+        if (this.fileHandle) {
+          await this.loadFromFileHandle();
+          this.showToast("Refreshed!");
+        } else {
+          this.showToast("Select file again to refresh");
+          document.getElementById('file-input').click();
+        }
+      }
+
+      async loadFromFileHandle(silent = false) {
+        if (!this.fileHandle) return;
+        try {
+          if ((await this.fileHandle.queryPermission({ mode: 'read' })) !== 'granted') {
+            if ((await this.fileHandle.requestPermission({ mode: 'read' })) !== 'granted') {
+              throw new Error("Permission denied");
+            }
+          }
+          const file = await this.fileHandle.getFile();
+          document.getElementById('status-text').textContent = file.name;
+          await this.loadFileObject(file);
+
+          this.fileVerified = true;
+          this.updateFileButton("Canvas: " + file.name, true);
+        } catch (e) {
+          this.showToast("Read Error: " + e.message);
+        }
+      }
+
+      async loadFileObject(file) {
+        try {
+          const text = await file.text();
+          const data = this.parser.parse(text);
+          this.renderCanvas(data);
+          document.getElementById('history-modal').classList.remove('open');
+        } catch (e) {
+          this.showToast("Parse Error: " + e.message);
+        }
+      }
+
+      async showHistory() {
+        const list = document.getElementById('recent-list');
+        list.innerHTML = 'Loading...';
+        document.getElementById('history-modal').classList.add('open');
+
+        const items = await this.recentManager.getRecents();
+        list.innerHTML = '';
+
+        if (items.length === 0) {
+          list.innerHTML = '<div class="empty-msg">No recent files found.</div>';
+          return;
+        }
+
+        items.slice(0, 10).forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'recent-item';
+          el.innerHTML = `
+                <span class="type">${item.type}</span>
+                <span class="name">${item.name}</span>
+            `;
+          el.onclick = async () => {
+            if (item.type === 'file') {
+              this.fileHandle = item.handle;
+              await this.loadFromFileHandle();
+            } else if (item.type === 'folder') {
+              this.vaultHandle = item.handle;
+              await this.loadFromVaultHandle();
+            }
+          };
+          list.appendChild(el);
+        });
+      }
+
+      renderCanvas(data) {
+        this.renderer.clear();
+        this.shiftX = Math.max(0, CONFIG.margin - this.parser.bounds.minX);
+        this.shiftY = Math.max(0, CONFIG.margin - this.parser.bounds.minY);
+
+        const width = this.parser.bounds.w + (CONFIG.margin * 2);
+        const height = this.parser.bounds.h + (CONFIG.margin * 2);
+        this.renderer.resizeStage(width, height);
+
+        const nodesMap = new Map();
+        (data.nodes || []).forEach(n => nodesMap.set(n.id, n));
+
+        this.renderer.renderNodes(data.nodes || [], this.shiftX, this.shiftY);
+        this.renderer.renderEdges(data.edges || [], nodesMap, this.shiftX, this.shiftY);
+
+        this.fitView();
+      }
+
+      handleWheel(e) {
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey || true) {
+          const delta = e.deltaY > 0 ? -CONFIG.zoomStep : CONFIG.zoomStep;
+          const newZoom = Utils.clamp(this.zoom + delta, CONFIG.minZoom, CONFIG.maxZoom);
+          const rect = this.viewport.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const worldX = (mouseX - this.viewX) / this.zoom;
+          const worldY = (mouseY - this.viewY) / this.zoom;
+          this.zoom = newZoom;
+          this.viewX = mouseX - worldX * this.zoom;
+          this.viewY = mouseY - worldY * this.zoom;
+          this.updateTransform();
+        } else {
+          this.viewX -= e.deltaX;
+          this.viewY -= e.deltaY;
+          this.updateTransform();
+        }
+      }
+
+      setZoom(val) {
+        this.zoom = Utils.clamp(val, CONFIG.minZoom, CONFIG.maxZoom);
+        this.updateTransform();
+        document.getElementById('btn-zoom-reset').textContent = Math.round(this.zoom * 100) + "%";
+      }
+
+      fitView() {
+        if (!this.parser.data) return;
+        const bounds = this.parser.bounds;
+        const viewW = this.viewport.clientWidth;
+        const viewH = this.viewport.clientHeight;
+        const totalW = bounds.w + CONFIG.margin * 2;
+        const totalH = bounds.h + CONFIG.margin * 2;
+        const scaleX = viewW / totalW;
+        const scaleY = viewH / totalH;
+        this.zoom = Math.min(scaleX, scaleY, 1.0) * 0.9;
+        this.viewX = (viewW - totalW * this.zoom) / 2;
+        this.viewY = (viewH - totalH * this.zoom) / 2;
+        this.setZoom(this.zoom);
+      }
+
+      updateTransform() {
+        this.stage.style.transform = `translate(${this.viewX}px, ${this.viewY}px) scale(${this.zoom})`;
+      }
+
+      performSearch(query) {
+        document.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
+        this.searchResults = [];
+        this.searchIndex = -1;
+        if (!query.trim()) { document.getElementById('search-count').textContent = ""; return; }
+        const lowerQ = query.toLowerCase();
+        document.querySelectorAll('.node').forEach(el => {
+          if (el.textContent.toLowerCase().includes(lowerQ)) {
+            el.classList.add('highlighted');
+            this.searchResults.push(el);
+          }
+        });
+        document.getElementById('search-count').textContent = this.searchResults.length > 0 ? `1 / ${this.searchResults.length}` : "0";
+        if (this.searchResults.length > 0) this.nextSearchResult(1);
+      }
+
+      nextSearchResult(direction) {
+        if (this.searchResults.length === 0) return;
+        this.searchIndex = (this.searchIndex + direction + this.searchResults.length) % this.searchResults.length;
+        const el = this.searchResults[this.searchIndex];
+        document.getElementById('search-count').textContent = `${this.searchIndex + 1} / ${this.searchResults.length}`;
+        const nx = parseFloat(el.style.left);
+        const ny = parseFloat(el.style.top);
+        const nw = parseFloat(el.style.width);
+        const nh = parseFloat(el.style.height);
+        const viewW = this.viewport.clientWidth;
+        const viewH = this.viewport.clientHeight;
+        this.viewX = (viewW / 2) - ((nx + nw / 2) * this.zoom);
+        this.viewY = (viewH / 2) - ((ny + nh / 2) * this.zoom);
+        this.updateTransform();
+      }
+
+      showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+      }
+    }
+
+    window.app = new App();
+
+  </script>
+</body>
+
+</html>
