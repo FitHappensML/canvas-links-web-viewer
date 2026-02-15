@@ -5,27 +5,32 @@
 
 A lightweight, **single-file** interactive viewer for Obsidian Canvas files (`.canvas`) that runs entirely in your browser. No server required.
 
-## 💡 The Idea: Order from Chaos
 
-> *"I run many projects in parallel. With 20+ tabs open, working now is fine. But a week later? It's impossible to remember what was what. Tabs turn into a graveyard."*
 
-This viewer solves "Tab Fatigue" by putting your entire project context on a **Big Infinite Sheet**.
+> [!NOTE]
+> **Status**: Currently a robust **Review/Viewer** tool.
+> **Coming Soon**: Full Editing capabilities (nodes, connections, text) are in active development and will be delivered within ~2 weeks. 🚀
 
-*   **See the Structure**: Don't just list links—map out *how* they relate to each other.
-*   **Instant Clarity**: Open one file and immediately grasp the project's state, even months later.
-*   **100% Portable**: It's just a file. Copy it to a flash drive, sync it via Git/Syncthing, or email it.
-*   **No Cloud Required**: Your data stays yours. No "Sign up to view."
+## 💡 The Vision: Your Browser as a Knowledge Studio
+Imagine a workspace where you can organize thoughts, drop links, and make quick notes in a **Big Infinite Sheet**, all within your browser. Then, everything syncs seamlessly back to your local Obsidian vault. You revisit projects years later with **zero context loss**.
 
-### 🚀 Key Features
+This project solves "Tab Fatigue" and "Project Amnesia".
 
-*   **Zero Install**: Everything is contained in one `canvas_viewer.html` file.
-*   **Vault Integration**: Connect your Obsidian Vault folder to preview linked markdown notes directly in the canvas.
-*   **Rich Link Previews**:
-    *   **Arxiv Papers**: Automatically fetches Title & Abstract (with CORS proxy support).
-    *   **YouTube**: Embeds videos directly.
-    *   **Images**: Renders image links inline.
+---
+
+![Promo Image](assets/image_01.png)
+
+## 🌟 Key Features
+
+*   **Zero Install**: Everything is contained in one single `canvas_viewer.html` file.
+*   **Vault Integration**: Connect your Obsidian Vault folder to see markdown notes directly in the canvas.
+*   **Hybrid Link Previews** (New!):
+    *   **Browsing Context**: Sites load directly inside the card (Mini-Browser).
+    *   **Smart Fallback**: If a site blocks embedding (e.g., GitHub), the card shows a polished header with the site's Favicon and Title.
+    *   **Rich Media**: Native support for YouTube embeds and Image links.
 *   **Smart History**: Remembers your recent files and vaults for one-click reconnection.
-*   **Search & Zoom**: Full pan/zoom controls and text search for large canvases.
+*   **Search & Zoom**: Full pan/zoom controls and text search for large, complex maps.
+*   **100% Local**: No cloud, no servers. Your data stays yours.
 
 ---
 
@@ -40,18 +45,34 @@ This viewer solves "Tab Fatigue" by putting your entire project context on a **B
 
 ### 📦 How to Use
 
-1.  **Download**: Get the [canvas_viewer.html](canvas_viewer.html) file.
-2.  **Open**: Double-click to open it in Chrome, Edge, or Firefox.
-3.  **Load Canvas**: Click **"Open File"** to select a `.canvas` or drag-and-drop it.
-4.  **Connect Vault (Optional)**: Click **"Select Vault Folder"** to enable markdown note previews.
+#### 1. Quick Start
+1.  **Download** the latest `canvas_viewer.html`.
+2.  **Open** it in any modern browser (Chrome, Edge, Firefox).
+3.  **Drag & Drop** your `.canvas` file onto the window.
 
-> **Note**: For the best experience, use a modern browser that supports the File System Access API (Chrome/Edge) to enable persistent file access.
+#### 2. Connect Your Vault (Recommended)
+To see the full content of your Markdown notes:
+1.  Click **"Select Vault Folder"**.
+2.  Choose the root folder of your Obsidian vault.
+3.  Browser permission will be requested (allow read access).
 
-### 🛠️ Configuration
-No configuration needed! All settings (like zoom level, recent files) are stored locally in your browser.
+#### 3. Enable Hybrid Links
+1.  Click the **Gear Icon** (Settings).
+2.  Toggle **"Enable Link Previews"**.
+3.  Enjoy browsing your reference links without leaving the board!
+
+---
+
+### 📅 Changelog
+
+#### [2026-02-14] Hybrid Link Update 💘
+*   **New**: **Hybrid Link Cards**. Links now attempt to load the live website inside the card.
+*   **New**: **Smart Fallbacks**. If a site (e.g., GitHub) blocks being viewed in a frame, the card gracefully displays a polished header with the site's Favicon and Title.
+*   **UID**: General UI polish for a cleaner, modern look.
 
 ---
 
 ### 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+

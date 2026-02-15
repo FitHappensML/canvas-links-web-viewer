@@ -479,6 +479,97 @@
       opacity: 0.8;
     }
 
+    /* Hybrid Card (Header + Iframe) */
+    .hybrid-card {
+      margin: 6px 0;
+      border: 1px solid var(--stroke);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--card-bg);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    .hybrid-header {
+      padding: 6px 10px;
+      background: rgba(45, 45, 48, 0.95);
+      border-bottom: 1px solid var(--stroke);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hybrid-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .hybrid-info {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      line-height: 1.2;
+    }
+
+    .hybrid-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .hybrid-domain {
+      font-size: 9px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0.8;
+    }
+
+    .hybrid-action {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 3px 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      border: 1px solid transparent;
+    }
+
+    .hybrid-action:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      border-color: var(--stroke);
+    }
+
+    .hybrid-preview {
+      width: 100%;
+      height: 240px;
+      /* Reduced specific height for better balance */
+      background: #111;
+      position: relative;
+    }
+
+    .hybrid-preview iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      /* Improve readability of content inside iframe if possible */
+      background: #fff;
+    }
+
     /* Loading state for card */
     .link-card.loading {
       opacity: 0.7;
@@ -504,6 +595,76 @@
       background: #000;
       margin-top: 4px;
     }
+
+    /* Settings Modal */
+    .settings-row {
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .settings-row:last-child {
+      border-bottom: none;
+    }
+
+    .settings-label {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .settings-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      transition: .4s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: var(--accent);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(16px);
+    }
   </style>
 </head>
 
@@ -515,6 +676,8 @@
     <div class="separator"></div>
     <button id="btn-refresh" class="btn" title="Reload current file (Ctrl+R)">Refresh</button>
     <button id="btn-vault" class="btn">Select Vault Folder</button>
+    <div class="separator"></div>
+    <button id="btn-settings" class="btn" title="Settings">⚙️</button>
     <div class="separator"></div>
     <button id="btn-zoom-out" class="btn">-</button>
     <button id="btn-zoom-reset" class="btn">100%</button>
@@ -555,6 +718,30 @@
         <span class="close-modal">&times;</span>
       </div>
       <div id="recent-list" class="recent-list"></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Settings</span>
+        <span class="close-modal" id="close-settings">&times;</span>
+      </div>
+      <div class="settings-content">
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">Enable Link Previews</div>
+            <div class="settings-desc">Load external websites within cards (Mini-Browser).</div>
+            <div class="settings-desc" style="color: var(--warning);">Note: Many sites (e.g. GitHub) block embedding.
+            </div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="setting-link-preview">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -706,6 +893,30 @@
             return `<iframe class="embedded-iframe" src="https://www.youtube.com/embed/${vid}" allowfullscreen></iframe>
                         <a href="${url}" target="_blank" class="action-link">${label || 'Watch on YouTube'} ↗</a>`;
           }
+        }
+
+        // Check Global Settings for Mini-Browser (Hybrid Mode)
+        const usePreview = window.app && window.app.settings && window.app.settings.enableLinkPreviews;
+        if (usePreview) {
+          const domain = new URL(url).hostname;
+          const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+          // Using a standard favicon service that respects privacy (no tracking param needed for this basic usage)
+
+          return `
+            <div class="hybrid-card">
+              <div class="hybrid-header">
+                <img src="${favicon}" class="hybrid-icon" onerror="this.style.display='none'" />
+                <div class="hybrid-info">
+                  <span class="hybrid-title">${label || domain}</span>
+                  <span class="hybrid-domain">${domain}</span>
+                </div>
+                <a href="${url}" target="_blank" class="hybrid-action">Open ↗</a>
+              </div>
+              <div class="hybrid-preview">
+                <iframe src="${url}" loading="lazy"></iframe>
+              </div>
+            </div>
+          `;
         }
 
         // Default Link Card
@@ -1147,6 +1358,7 @@
         this.searchResults = []; this.searchIndex = -1;
 
         this.bindEvents();
+        this.initSettings();
         this.setupFallbackInputs();
 
         // Startup Logic
@@ -1264,6 +1476,45 @@
               this.showToast(`Found recent vault: ${this.vaultHandle.name}`);
             }
           } catch (e) { console.warn(e); }
+        }
+      }
+
+      // --- Settings Logic ---
+
+      initSettings() {
+        this.settings = {
+          enableLinkPreviews: localStorage.getItem('canvas_viewer_link_previews') === 'true'
+        };
+
+        // Bind UI
+        const modal = document.getElementById('settings-modal');
+        const btn = document.getElementById('btn-settings');
+        const close = document.getElementById('close-settings');
+        const toggle = document.getElementById('setting-link-preview');
+
+        if (btn) {
+          btn.onclick = () => {
+            toggle.checked = this.settings.enableLinkPreviews;
+            modal.classList.add('open');
+          };
+        }
+
+        if (close) {
+          close.onclick = () => modal.classList.remove('open');
+        }
+
+        if (modal) {
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('open');
+          });
+        }
+
+        if (toggle) {
+          toggle.onchange = (e) => {
+            this.settings.enableLinkPreviews = e.target.checked;
+            localStorage.setItem('canvas_viewer_link_previews', e.target.checked);
+            this.showToast("Settings saved. Refresh to apply changes.");
+          };
         }
       }
 
